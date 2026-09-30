@@ -64,8 +64,10 @@ const ROWS = [
   ["state_house", "State House"], ["state_senate", "State Senate"], ["congressional", "Congressional"],
 ];
 const map = L.map("map").fitBounds(L.geoJSON(D.county).getBounds());
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-  { attribution: "© OpenStreetMap, © CARTO | Boundaries: U.S. Census Bureau", maxZoom: 19 }).addTo(map);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+  { attribution: "Basemap © Esri | Boundaries: U.S. Census Bureau", maxNativeZoom: 16, maxZoom: 19 }).addTo(map);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+  { maxNativeZoom: 16, maxZoom: 19, pane: "shadowPane" }).addTo(map);
 L.geoJSON(D.precinct, { style: { color: "#8a97a6", weight: 0.8, fillOpacity: 0 }, interactive: false }).addTo(map);
 L.geoJSON(D.county, { style: { color: "#1b2430", weight: 2, fillOpacity: 0 }, interactive: false }).addTo(map);
 let hiLayer = null, marker = null;
