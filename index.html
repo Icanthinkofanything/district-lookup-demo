@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Find Your Voting Districts</title>
+<meta name="description" content="Demo: type an address in Vanderburgh County, Indiana and see its precinct, township, county, state house, state senate and congressional district.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1b2430; --muted:#5f6b78; --line:#e2e6ea; --bg:#f6f7f8; --accent:#1f5fae; --hit:#e8f0fb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 Inter, system-ui, sans-serif; color:var(--ink); background:var(--bg); }
+  .wrap { max-width:1100px; margin:0 auto; padding:24px 16px 40px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 18px; }
+  form { display:flex; gap:8px; margin-bottom:16px; }
+  input { flex:1; min-width:0; padding:12px 14px; font:inherit; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  input:focus { outline:2px solid var(--accent); border-color:transparent; }
+  button { padding:12px 18px; font:inherit; font-weight:600; border:0; border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .grid { display:grid; grid-template-columns:360px 1fr; gap:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; }
+  #map { height:560px; border-radius:10px; border:1px solid var(--line); }
+  .matched { font-size:13px; color:var(--muted); margin:0 0 12px; }
+  table { width:100%; border-collapse:collapse; }
+  td { padding:9px 0; border-bottom:1px solid var(--line); vertical-align:top; }
+  td:first-child { color:var(--muted); width:42%; }
+  td:last-child { font-weight:600; }
+  .msg { color:var(--muted); }
+  .err { color:#b42318; }
+  .examples { font-size:13px; color:var(--muted); margin-top:12px; }
+  .examples a { color:var(--accent); cursor:pointer; text-decoration:underline; }
+  .note { font-size:12.5px; color:var(--muted); margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
+  @media (max-width: 820px) { .grid { grid-template-columns:1fr; } #map { height:380px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Find your voting districts</h1>
+  <p class="sub">Enter a street address in Vanderburgh County, Indiana, or click anywhere on the map.</p>
+  <form id="f">
+    <input id="addr" placeholder="e.g. 1 NW Martin Luther King Jr Blvd, Evansville, IN" autocomplete="street-address" required>
+    <button id="go">Look up</button>
+  </form>
+  <div class="grid">
+    <div class="card">
+      <div id="out"><p class="msg">Results appear here.</p></div>
+      <div class="examples">Try: <a data-a="1 NW Martin Luther King Jr Blvd, Evansville, IN 47708">Civic Center</a> ·
+        <a data-a="1800 Lincoln Ave, Evansville, IN 47714">University of Evansville</a> ·
+        <a data-a="8600 University Blvd, Evansville, IN 47712">USI</a></div>
+      <p class="note">Demo built with public U.S. Census boundaries (precincts, townships, state legislative and congressional districts) and the free Census address geocoder, so it has no API keys or ongoing costs. The client version would use your own KML/GeoJSON files and show all of their fields.</p>
+    </div>
+    <div id="map"></div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+<script src="data.js"></script>
+<script>
+const D = window.DISTRICTS;
+const ROWS = [
+  ["precinct", "Precinct"], ["township", "Township"], ["county", "County"],
+  ["state_house", "State House"], ["state_senate", "State Senate"], ["congressional", "Congressional"],
+];
+const map = L.map("map").fitBounds(L.geoJSON(D.county).getBounds());
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+  { attribution: "© OpenStreetMap, © CARTO | Boundaries: U.S. Census Bureau", maxZoom: 19 }).addTo(map);
+L.geoJSON(D.precinct, { style: { color: "#8a97a6", weight: 0.8, fillOpacity: 0 }, interactive: false }).addTo(map);
+L.geoJSON(D.county, { style: { color: "#1b2430", weight: 2, fillOpacity: 0 }, interactive: false }).addTo(map);
+let hiLayer = null, marker = null;
+
+function lookup(lon, lat, label) {
+  const pt = turf.point([lon, lat]);
+  const hits = {};
+  for (const [k] of ROWS) hits[k] = D[k].features.find(f => turf.booleanPointInPolygon(pt, f));
+  const out = document.getElementById("out");
+  if (!hits.county) {
+    out.innerHTML = `<p class="err">That location is outside Vanderburgh County.</p>`;
+  } else {
+    out.innerHTML = `<p class="matched">${label}</p><table>` +
+      ROWS.map(([k, name]) => `<tr><td>${name}</td><td>${hits[k] ? hits[k].properties.NAME.replace(/\b(\w)(\w*)/g, (m,a,b)=>a+b.toLowerCase()).replace(/Precinct/i,"Precinct") : "—"}</td></tr>`).join("") + `</table>`;
+  }
+  if (hiLayer) map.removeLayer(hiLayer);
+  if (marker) map.removeLayer(marker);
+  if (hits.precinct) hiLayer = L.geoJSON(hits.precinct, { style: { color: "#1f5fae", weight: 2, fillColor: "#1f5fae", fillOpacity: .15 } }).addTo(map);
+  marker = L.marker([lat, lon]).addTo(map);
+  map.setView([lat, lon], Math.max(map.getZoom(), 13));
+}
+
+// Census geocoder (free, no key) via JSONP
+function geocode(address) {
+  return new Promise((resolve, reject) => {
+    const cb = "cb" + Date.now();
+    const s = document.createElement("script");
+    window[cb] = (res) => { resolve(res); delete window[cb]; s.remove(); };
+    s.onerror = () => { reject(new Error("Geocoder unavailable")); s.remove(); };
+    s.src = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=jsonp&callback=" + cb + "&address=" + encodeURIComponent(address);
+    document.head.appendChild(s);
+  });
+}
+
+document.getElementById("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("go"), out = document.getElementById("out");
+  btn.disabled = true; out.innerHTML = `<p class="msg">Looking up address…</p>`;
+  try {
+    const res = await geocode(document.getElementById("addr").value);
+    const m = res.result.addressMatches[0];
+    if (!m) out.innerHTML = `<p class="err">No match found. Check the street number, street name and city.</p>`;
+    else lookup(m.coordinates.x, m.coordinates.y, m.matchedAddress);
+  } catch (err) { out.innerHTML = `<p class="err">${err.message}. Please try again.</p>`; }
+  btn.disabled = false;
+});
+map.on("click", (e) => lookup(e.latlng.lng, e.latlng.lat, `Map point ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`));
+document.querySelectorAll(".examples a").forEach(a => a.onclick = () => {
+  document.getElementById("addr").value = a.dataset.a;
+  document.getElementById("f").requestSubmit();
+});
+</script>
+</body>
+</html>
